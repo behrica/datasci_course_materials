@@ -1,0 +1,189 @@
+---
+title: "Analyze crime data"
+author: "Carsten Behring"
+date: '`r Sys.Date()`'
+output:
+  html_document:
+     fig_width: 15
+     fig_height: 10
+     toc: true
+     code_folding: hide
+
+---
+
+
+
+
+```{r}
+library(tidyverse)
+library(janitor)
+library(ggplot2)
+library(lubridate)
+library(viridis)
+library(forcats)
+
+```
+
+# Introduction
+
+<style type="text/css">
+
+ .main-container { width: 90%; max-width:100%;}
+
+</style>
+
+The goal of this report is to show, which times of the day are more dangerous for which type of crimes.
+We have data for Seattle and San Francisco and want to analyze the occurrence patterns of type of crimes per time of the day.
+
+# Data source
+
+The data to be used is the criminal statistic of the city of Seattle downloadable here:
+https://github.com/uwescience/datasci_course_materials/tree/master/assignment6
+
+## Analysis for Seattle
+
+The data for Seattle looks likes this
+
+```{r}
+seattle <- readr::read_csv("./seattle_incidents_summer_2014.csv") %>%
+    clean_names()
+
+glimpse(seattle,witdth=120)
+
+
+```
+
+
+
+```{r}
+seattle <- 
+    seattle %>% mutate(occurred_date_or_date_range_start=mdy_hms(occurred_date_or_date_range_start),
+                 start_hour = hour(occurred_date_or_date_range_start))
+
+```
+
+First I plot all crime incidents with their starting hour and the district they occur:
+
+```{r}
+ggplot(seattle) +
+    geom_jitter(aes(start_hour,summarized_offense_description,color=district_sector),alpha=0.5) +
+    labs(x="Hour of day", y="Type of crime",color="District")
+``` 
+
+This shows clearly, that the crime of 'Prostitution' occur mainly in one district('N') concentrated at certain time of the day, namely between mid-day and 2 o clock in the morning.
+
+Further, it seems that district R and S have overall higher crime rates.
+
+
+
+Different type of crime occur with different frequency:
+
+```{r}
+tabyl(seattle,summarized_offense_description,sort = T)
+
+``` 
+
+
+
+This plot shows, that car prowls and other different types of theft / robbery occur most often.
+
+```{r}
+
+seattle %>%
+    count(summarized_offense_description) %>%
+    ggplot() +
+    geom_col(aes(x=fct_reorder(summarized_offense_description,n) ,y=n)) +
+    coord_flip() +
+    labs(y="# crimes",
+         x="type of crime",
+         title="Frequencies of crime types") 
+
+
+``` 
+
+To get a nice overview of the type of crime occurring per day, we will look at a heat map which 
+shows how many crimes(and of which type) occurred at which time of the day.
+
+
+```{r}
+
+seattle %>% count(summarized_offense_description,start_hour) %>%
+    mutate(total=sum(n)) %>%
+    ungroup %>%
+    mutate(summarized_offense_description=fct_reorder(summarized_offense_description,n)) %>%
+    ggplot() +
+    geom_tile(aes(start_hour,summarized_offense_description,fill=n)) +
+    scale_fill_viridis(name="# crimes") +
+labs(x="Hour of the day",y="type of crime",
+     title='Crime types during the day for Seattle')    
+
+```
+
+This shows that certain types of crimes are concentrated at certain moments of the day.
+
+# Analysis of San Francisco
+
+The data of San Francisco  similar, but the types of crimes are different.
+
+
+```{r}
+sf <- readr::read_csv("./sanfrancisco_incidents_summer_2014.csv") %>%
+    clean_names()
+
+glimpse(sf,width=120)
+sf <- 
+    sf %>% mutate(start_hour = hour(time))
+
+```
+
+
+```{r}
+sf %>%
+    count(category) %>%
+    ggplot() +
+    geom_col(aes(x=fct_reorder(category,n) ,y=n)) + coord_flip()
+``` 
+
+
+```{r}
+sf %>% count(category,start_hour) %>%
+    mutate(total=sum(n)) %>%
+    ungroup %>%
+    mutate(category=fct_reorder(category,n)) %>%
+    ggplot() +
+    geom_tile(aes(start_hour,category,fill=n)) +
+    scale_fill_viridis(name="# crimes") +
+labs(x="Hour of the day",y="type of crime",
+     title="Crime types during the day for San Francisco")    
+```
+
+## Compare crime numbers for both cities
+  
+As the crime categories are different between both cities, I decided to compare only the over all number of crimes during the day.  
+
+
+
+```{r}
+both <- count(seattle,start_hour) %>% mutate(city="Seattle") %>% bind_rows(count(sf,start_hour) %>% mutate(city="San Francisco"))
+ggplot(both) + geom_line(aes(start_hour,n,color=city)) +
+    labs(x="Hour of the day",
+         y="# crimes",
+         title="# crimes during the day")
+
+``` 
+
+This shows, that there is a similar over all trend in both cities. The peak of crime is at midnight, then it decreases up to 5 o'clock, where it has the  minimum. 
+
+The it increase again up to 12 o'clock, where it reaches an other maximum as high a the nightly maximum.
+
+Overall Seattle has more crimes then San Francisco.
+
+This plot shows this more clear, but the difference is small.
+
+
+
+```{r}
+
+bind_rows(count(seattle),count(sf),.id='city') %>% mutate(city=fct_recode(city,Seattle="1",`San Francisco`="2")) %>% ggplot() + geom_col(aes(x=city,y=n)) + labs(x="City",y="# crimes")
+
+``` 
